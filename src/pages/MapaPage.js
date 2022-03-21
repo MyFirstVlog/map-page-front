@@ -1,42 +1,75 @@
-import React, { useEffect, useRef, useState } from 'react'
-import mapboxgl from 'mapbox-gl'
+import React, { useContext, useEffect } from 'react';
+import { SocketContext } from '../context/socketContext';
+import { useMapbox } from '../hooks/useMapbox';
 
 
-//TODO: Cambiar api key
-mapboxgl.accessToken = 'pk.eyJ1IjoiYWxlamFuZHJvLWVzdHJhZGFtIiwiYSI6ImNsMHZ3emZrdzFiYngzY3FvbnViNW0wMXMifQ.QMPSfS8Ey0tIcpe0mtnfpg';
-
-const initialPoint = {
-  lng: 5  ,
-  lat: 34 ,
-  zoom: 2 ,
+const puntoInicial = {
+    lng: -122.4725,
+    lat: 37.8010,
+    zoom: 13.5
 }
+
 
 export const MapaPage = () => {
 
-  const mapaDiv = useRef();
-  const [mapa, setMapa] = useState()
+    const { setRef, coords, nuevoMarcador$, movimientoMarcador$, agregarMarcador, actualizarPosicion } = useMapbox( puntoInicial );
+    const { socket } = useContext( SocketContext );
 
-  useEffect(() => {
-    const map = new mapboxgl.Map({
-      container: mapaDiv.current, // container ID
-      style: 'mapbox://styles/mapbox/streets-v11', // style URL
-      center: [initialPoint.lng, initialPoint.lat],
-      zoom:  initialPoint.zoom
-    });
+    // Escuchar los marcadores existentes
+    useEffect(() => {
+        socket.on( 'marcadores-activos', (marcadores) => {
+            for( const key of Object.keys( marcadores ) ) {
+                agregarMarcador( marcadores[key], key );
+            }
+        });
+    }, [ socket, agregarMarcador ])
 
-    setMapa(map);
+    // Nuevo marcador
+    useEffect(() => {
+        nuevoMarcador$.subscribe( marcador => {
+            socket.emit( 'nuevo-marcador', marcador );
+        });
+    }, [nuevoMarcador$, socket]);
 
-  }, [])
-  
+    // Movimiento de Marcador
+    useEffect(() => {
+        movimientoMarcador$.subscribe( marcador => {
+            socket.emit( 'marcador-actualizado', marcador );
+        });
+    }, [socket, movimientoMarcador$]);
 
-  return (
-    <>
-        <div
-            ref={mapaDiv}
-            className='mapContainer'
-        >
+    // Mover marcador mediante sockets
+    useEffect( () => {
+        socket.on( 'marcador-actualizado', ( marcador) => {
+            actualizarPosicion( marcador );
+        })
+    },[ socket, actualizarPosicion ])
+    
+    // Escuchar nuevos marcadores
+    useEffect(() => {
+        
+        socket.on('nuevo-marcador', ( marcador ) => {
+          console.log('nuevo-marcador', marcador)
+            agregarMarcador( marcador, marcador.id );
+        });
 
-        </div>
-    </>
-  )
+    }, [socket, agregarMarcador])
+
+
+    return (
+        <>
+
+            <div className="info">
+                Lng: { coords.lng } | lat: { coords.lat } | zoom: { coords.zoom }
+            </div>
+            
+            <div 
+                ref={ setRef }
+                className="mapContainer"
+            />
+
+            
+
+        </>
+    )
 }
